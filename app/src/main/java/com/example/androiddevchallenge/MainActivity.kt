@@ -117,13 +117,15 @@ fun MyApp() {
                     num = firstDigit,
                     editable = !isCountingDown,
                     onClickAdd = { if (timer / 10 < 9) timer += 10 },
-                    onClickMinus = { if (timer / 10 > 0) timer -= 10 })
+                    onClickMinus = { if (timer / 10 > 0) timer -= 10 }
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 EditableDigit(
                     num = secondDigit,
                     editable = !isCountingDown,
                     onClickAdd = { if (timer < 99) timer++ },
-                    onClickMinus = { if (timer > 0) timer-- })
+                    onClickMinus = { if (timer > 0) timer-- }
+                )
             }
         }
     }
