@@ -18,13 +18,20 @@ package com.example.androiddevchallenge
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.Button
+import androidx.compose.material.FabPosition
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Scaffold
@@ -44,7 +51,6 @@ import androidx.compose.ui.unit.sp
 import com.example.androiddevchallenge.ui.theme.MyTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.threeten.bp.Instant
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,86 +63,24 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-data class Timer(val hours: Int, val minutes: Int, val seconds: Int)
-
-typealias Milliseconds = Long
-
-fun Timer.toMilliseconds(): Milliseconds = (hours * 60 * 60 + minutes * 60 + seconds) * 1000L
-
-fun Milliseconds.toTimer(): Timer {
-    val hours: Int = ((this / 3600) / 1000).toInt()
-    val minutes: Int = ((this / 1000 - hours * 3600) / 60).toInt()
-    val seconds: Int = (this / 1000 - hours * 3600 - minutes * 60).toInt()
-    println("===========================\n$this\n${hours}h ${minutes}m ${seconds}s")
-    return Timer(hours, minutes, seconds)
-}
-
-fun pad(x: Int): String = if (x < 10) "0$x" else "$x"
-
-fun Timer.format(): String {
-    return "${pad(hours)}:${pad(minutes)}:${pad(seconds)}"
-}
-
-typealias EditableTimer = List<Char>
-
-fun EditableTimer.toTimer(): Timer {
-    val significantValues = if (size >= 6)
-        takeLast(6)
-    else
-        (0..6 - size).map { '0' } + this
-
-    val hours = significantValues.subList(0, 2).joinToString("").toInt()
-    val minutes = significantValues.subList(2, 4).joinToString("").toInt()
-    val seconds = significantValues.subList(4, 6).joinToString("").toInt()
-    return Timer(hours, minutes, seconds)
-}
-
-enum class CountdownState { COUNTING, PAUSED }
-
-data class Countdown(val timer: Timer, val state: CountdownState, val expiration: Instant? = null)
-
 // Start building your app here!
 @Composable
 fun MyApp() {
-    val start = Instant.now()
-    var isEditing by remember { mutableStateOf(true) }
     var isCountingDown by remember { mutableStateOf(false) }
-    var editableTime by remember { mutableStateOf(listOf<Char>()) }
-    var countdownState: CountdownState by remember { mutableStateOf(CountdownState.PAUSED) }
-    val length = editableTime.toTimer()
-    var remainingMilliseconds by remember { mutableStateOf(length.toMilliseconds()) }
     val scope = rememberCoroutineScope()
-    val expiration = start.plusMillis(length.toMilliseconds())
+
+    var timer by remember { mutableStateOf(9) }
+
     scope.launch {
-        if (countdownState == CountdownState.COUNTING) {
-            while (expiration.isAfter(Instant.now())) {
-                remainingMilliseconds = (expiration.toEpochMilli() - Instant.now().toEpochMilli())
-                delay(1000)
-            }
-            remainingMilliseconds = 0
-        }
-    }
-    fun updateEditableTime(block: (MutableList<Char>) -> Unit) {
-        val numbers = editableTime.toMutableList()
-        block(numbers)
-        editableTime = numbers
-    }
-
-    fun onClickNumber(num: Int) {
-        updateEditableTime {
-            it.add("$num".first())
-        }
-    }
-
-    fun onClickDelete() {
-        updateEditableTime {
-            if (it.isNotEmpty()) it.removeLast()
+        while (true) {
+            if (isCountingDown) timer--
+            if (timer == 0) isCountingDown = false
+            delay(1000)
         }
     }
 
     fun onPlayOrResume() {
-        isCountingDown = true
-        isEditing = false
+        if (timer > 0) isCountingDown = true
     }
 
     fun onPause() {
@@ -157,75 +101,170 @@ fun MyApp() {
                 FloatingActionButton(onClick = ::onClickFab) {
                     Text(text = if (isCountingDown) "||" else ">")
                 }
-            }
+            },
+            floatingActionButtonPosition = FabPosition.Center,
         ) {
-            Column(
+            Row(
                 Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
             ) {
-                if (isEditing) {
-                    TimerText(text = length.format(), Modifier.clickable { isEditing = true })
-                    NumberPad(onClickNumber = ::onClickNumber, onClickDelete = ::onClickDelete)
-                } else {
-                    TimerText(text = remainingMilliseconds.toTimer().format())
-                }
+                val firstDigit = timer / 10
+                val secondDigit = timer % 10
+                EditableDigit(
+                    num = firstDigit,
+                    editable = !isCountingDown,
+                    onClickAdd = { if (timer / 10 < 9) timer += 10 },
+                    onClickMinus = { if (timer / 10 > 0) timer -= 10 })
+                Spacer(modifier = Modifier.width(8.dp))
+                EditableDigit(
+                    num = secondDigit,
+                    editable = !isCountingDown,
+                    onClickAdd = { if (timer < 99) timer++ },
+                    onClickMinus = { if (timer > 0) timer-- })
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+fun EditableDigit(num: Int, editable: Boolean, onClickAdd: () -> Unit, onClickMinus: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        AnimatedVisibility(visible = editable) {
+            Button(onClick = onClickAdd) {
+                Text(text = "+", fontSize = 24.sp)
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        DigitGrid(num = num)
+        Spacer(modifier = Modifier.height(8.dp))
+        AnimatedVisibility(visible = editable) {
+            Button(onClick = onClickMinus) {
+                Text(text = "-", fontSize = 24.sp)
             }
         }
     }
 }
 
 @Composable
-fun TimerText(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.body1,
-        fontSize = 32.sp,
-        modifier = modifier
+fun NumberPixel(on: Boolean) {
+    Box(
+        modifier = Modifier
+            .width(24.dp)
+            .height(24.dp)
+            .background(if (on) MaterialTheme.colors.secondary else MaterialTheme.colors.background)
     )
 }
 
-val keyPadding = 16.dp
+val digitMapping = arrayOf(
+    arrayOf(
+        arrayOf(1, 1, 1, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 1, 1, 1),
+    ),
+    arrayOf(
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+    ),
+    arrayOf(
+        arrayOf(1, 1, 1, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(1, 1, 1, 1),
+        arrayOf(1, 0, 0, 0),
+        arrayOf(1, 0, 0, 0),
+        arrayOf(1, 1, 1, 1),
+    ),
+    arrayOf(
+        arrayOf(1, 1, 1, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(1, 1, 1, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(1, 1, 1, 1),
+    ),
+    arrayOf(
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 1, 1, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+    ),
+    arrayOf(
+        arrayOf(1, 1, 1, 1),
+        arrayOf(1, 0, 0, 0),
+        arrayOf(1, 0, 0, 0),
+        arrayOf(1, 1, 1, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(1, 1, 1, 1),
+    ),
+    arrayOf(
+        arrayOf(1, 1, 1, 1),
+        arrayOf(1, 0, 0, 0),
+        arrayOf(1, 0, 0, 0),
+        arrayOf(1, 1, 1, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 1, 1, 1),
+    ),
+    arrayOf(
+        arrayOf(1, 1, 1, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+    ),
+    arrayOf(
+        arrayOf(1, 1, 1, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 1, 1, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 1, 1, 1),
+    ),
+    arrayOf(
+        arrayOf(1, 1, 1, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 0, 0, 1),
+        arrayOf(1, 1, 1, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+        arrayOf(0, 0, 0, 1),
+    ),
+)
 
 @Composable
-fun NumberPad(onClickNumber: (Int) -> Unit, onClickDelete: () -> Unit) {
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Row {
-            NumberKey(number = 1, onClick = onClickNumber)
-            NumberKey(number = 2, onClick = onClickNumber)
-            NumberKey(number = 3, onClick = onClickNumber)
-        }
-        Row {
-            NumberKey(number = 4, onClick = onClickNumber)
-            NumberKey(number = 5, onClick = onClickNumber)
-            NumberKey(number = 6, onClick = onClickNumber)
-        }
-        Row {
-            NumberKey(number = 7, onClick = onClickNumber)
-            NumberKey(number = 8, onClick = onClickNumber)
-            NumberKey(number = 9, onClick = onClickNumber)
-        }
-        Row {
-            Text(text = " ", Modifier.padding(keyPadding))
-            NumberKey(number = 0, onClick = onClickNumber)
-            Text(text = "<",
-                Modifier
-                    .clickable { onClickDelete() }
-                    .padding(keyPadding))
-        }
+fun DigitGrid(num: Int) {
+    Column {
+        digitMapping[num]
+            .map {
+                Row {
+                    it.map {
+                        NumberPixel(on = it != 0)
+                    }
+                }
+            }
     }
 }
-
-@Composable
-fun NumberKey(number: Int, onClick: (Int) -> Unit) {
-    Text(text = "$number",
-        Modifier
-            .clickable { onClick(number) }
-            .padding(keyPadding))
-}
-
 
 @Preview("Light Theme", widthDp = 360, heightDp = 640)
 @Composable
